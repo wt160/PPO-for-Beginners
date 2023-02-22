@@ -9,8 +9,10 @@ import torch
 
 from arguments import get_args
 from ppo import PPO
+from ppo_advanced import PPO2
 from network import FeedForwardNN
 from eval_policy import eval_policy
+from torch.utils.tensorboard import SummaryWriter
 
 def train(env, hyperparameters, actor_model, critic_model):
 	"""
@@ -28,7 +30,7 @@ def train(env, hyperparameters, actor_model, critic_model):
 	print(f"Training", flush=True)
 
 	# Create a model for PPO.
-	model = PPO(policy_class=FeedForwardNN, env=env, **hyperparameters)
+	model = PPO2(policy_class=FeedForwardNN, env=env, **hyperparameters)
 
 	# Tries to load in an existing actor/critic model to continue training on
 	if actor_model != '' and critic_model != '':
@@ -101,15 +103,15 @@ def main(args):
 				'n_updates_per_iteration': 10,
 				'lr': 3e-4, 
 				'clip': 0.2,
-				'render': True,
-				'render_every_i': 10
+				'render': False,
+				'render_every_i': 40
 			  }
 
 	# Creates the environment we'll be running. If you want to replace with your own
 	# custom environment, note that it must inherit Gym and have both continuous
 	# observation and action spaces.
-	env = gym.make('Pendulum-v0')
-
+	# env = gym.make('Pendulum-v0')
+	env = gym.make('BipedalWalker-v3', hardcore=True)
 	# Train or test, depending on the mode specified
 	if args.mode == 'train':
 		train(env=env, hyperparameters=hyperparameters, actor_model=args.actor_model, critic_model=args.critic_model)
