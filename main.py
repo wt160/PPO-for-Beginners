@@ -107,11 +107,12 @@ def main(args):
 				'render_every_i': 40
 			  }
 
+	
 	# Creates the environment we'll be running. If you want to replace with your own
 	# custom environment, note that it must inherit Gym and have both continuous
 	# observation and action spaces.
 	# env = gym.make('Pendulum-v0')
-	env = gym.make('BipedalWalker-v3', hardcore=True)
+	env = gym.make('BipedalWalker-v3', hardcore=False)
 	# Train or test, depending on the mode specified
 	if args.mode == 'train':
 		train(env=env, hyperparameters=hyperparameters, actor_model=args.actor_model, critic_model=args.critic_model)

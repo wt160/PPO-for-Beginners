@@ -13,6 +13,8 @@ import torch
 import torch.nn as nn
 from torch.optim import Adam
 from torch.distributions import MultivariateNormal
+# from torch.utils.tensorboard import SummaryWriter
+from tensorboardX import SummaryWriter
 
 class PPO2:
 	"""
@@ -30,6 +32,13 @@ class PPO2:
 			Returns:
 				None
 		"""
+		self.writer = SummaryWriter()
+		# launch(tensorboardX, logdir=f"runs")
+		print(hyperparameters)
+		self.writer.add_text(
+			"hyperparameters",
+			"|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in hyperparameters.items()])),
+		)
 		# Make sure the environment is compatible with our code
 		assert(type(env.observation_space) == gym.spaces.Box)
 		assert(type(env.action_space) == gym.spaces.Box)
@@ -43,12 +52,12 @@ class PPO2:
 		self.act_dim = env.action_space.shape[0]
 
 		 # Initialize actor and critic networks
-		self.actor = policy_class(self.obs_dim, self.act_dim)                                                   # ALG STEP 1
-		self.critic = policy_class(self.obs_dim, 1)
+		self.actor = policy_class(self.obs_dim, self.act_dim, 0.01)                                                   # ALG STEP 1
+		self.critic = policy_class(self.obs_dim, 1, 1.0)
 
 		# Initialize optimizers for actor and critic
-		self.actor_optim = Adam(self.actor.parameters(), lr=self.lr)
-		self.critic_optim = Adam(self.critic.parameters(), lr=self.lr)
+		self.actor_optim = Adam(self.actor.parameters(), lr=self.lr, eps=1e-5)
+		self.critic_optim = Adam(self.critic.parameters(), lr=self.lr, eps=1e-5)
 
 		# Initialize the covariance matrix used to query the actor for actions
 		self.cov_var = torch.full(size=(self.act_dim,), fill_value=0.5)
@@ -62,7 +71,10 @@ class PPO2:
 			'batch_lens': [],       # episodic lengths in batch
 			'batch_rews': [],       # episodic returns in batch
 			'actor_losses': [],     # losses of actor network in current iteration
+			'clipfrac': [],
 		}
+
+		
 
 	def learn(self, total_timesteps):
 		"""
@@ -81,6 +93,12 @@ class PPO2:
 		while t_so_far < total_timesteps:                                                                       # ALG STEP 2
 			# Autobots, roll out (just kidding, we're collecting our batch simulations here)
 			batch_obs, batch_acts, batch_log_probs, batch_rtgs, batch_lens = self.rollout()                     # ALG STEP 3
+
+			#IMPLEMENTATION DETAIL: learning rate annealing
+			trainning_frac = 1.0 - t_so_far / total_timesteps
+			lrnow = trainning_frac * self.lr
+			self.critic_optim.param_groups[0]["lr"] = lrnow
+			self.actor_optim.param_groups[0]["lr"] = lrnow
 
 			# Calculate how many timesteps we collected this batch
 			t_so_far += np.sum(batch_lens)
@@ -102,6 +120,7 @@ class PPO2:
 			# solving some environments was too unstable without it.
 			A_k = (A_k - A_k.mean()) / (A_k.std() + 1e-10)
 
+			clipfracs = []
 			# This is the loop where we update our network for some n epochs
 			for _ in range(self.n_updates_per_iteration):                                                       # ALG STEP 6 & 7
 				# Calculate V_phi and pi_theta(a_t | s_t)
@@ -116,6 +135,8 @@ class PPO2:
 				# TL;DR makes gradient ascent easier behind the scenes.
 				ratios = torch.exp(curr_log_probs - batch_log_probs)
 
+
+				clipfracs += [((ratios - 1.0).abs() > self.clip).float().mean().item()] 
 				# Calculate surrogate losses.
 				surr1 = ratios * A_k
 				surr2 = torch.clamp(ratios, 1 - self.clip, 1 + self.clip) * A_k
@@ -130,23 +151,26 @@ class PPO2:
 				# Calculate gradients and perform backward propagation for actor network
 				self.actor_optim.zero_grad()
 				actor_loss.backward(retain_graph=True)
+				nn.utils.clip_grad_norm_(self.actor.parameters(), 0.5)
 				self.actor_optim.step()
 
 				# Calculate gradients and perform backward propagation for critic network
 				self.critic_optim.zero_grad()
 				critic_loss.backward()
+				nn.utils.clip_grad_norm_(self.critic.parameters(), 0.5)
 				self.critic_optim.step()
 
 				# Log actor loss
 				self.logger['actor_losses'].append(actor_loss.detach())
 
 			# Print a summary of our training so far
+			self.logger['clipfrac'] = clipfracs
 			self._log_summary()
 
 			# Save our model if it's time
 			if i_so_far % self.save_freq == 0:
-				torch.save(self.actor.state_dict(), './ppo_actor.pth')
-				torch.save(self.critic.state_dict(), './ppo_critic.pth')
+				torch.save(self.actor.state_dict(), './' + self.run_name + 'ppo_actor.pth')
+				torch.save(self.critic.state_dict(), './' + self.run_name + 'ppo_critic.pth')
 
 	def rollout(self):
 		"""
@@ -386,6 +410,8 @@ class PPO2:
 		self.gamma = 0.95                               # Discount factor to be applied when calculating Rewards-To-Go
 		self.clip = 0.2                                 # Recommended 0.2, helps define the threshold to clip the ratio during SGA
 		self.gae_lambda = 0.95
+		self.run_name = "plainfield"
+
 
 		# Miscellaneous parameters
 		self.render = True                              # If we should render during rollout
@@ -395,6 +421,8 @@ class PPO2:
 
 		# Change any default values to custom values for specified hyperparameters
 		for param, val in hyperparameters.items():
+			print(param)
+			print(val)
 			exec('self.' + param + ' = ' + str(val))
 
 		# Sets the seed if specified
@@ -430,6 +458,8 @@ class PPO2:
 		avg_ep_rews = np.mean([np.sum(ep_rews) for ep_rews in self.logger['batch_rews']])
 		avg_actor_loss = np.mean([losses.float().mean() for losses in self.logger['actor_losses']])
 
+		self.writer.add_scalar("charts/clipfrac", np.mean(self.logger['clipfrac']), t_so_far)
+		self.writer.add_scalar("charts/episodic_return", avg_ep_rews.item(), t_so_far)
 		# Round decimal places for more aesthetic logging messages
 		avg_ep_lens = str(round(avg_ep_lens, 2))
 		avg_ep_rews = str(round(avg_ep_rews, 2))
@@ -445,7 +475,7 @@ class PPO2:
 		print(f"Iteration took: {delta_t} secs", flush=True)
 		print(f"------------------------------------------------------", flush=True)
 		print(flush=True)
-
+		
 		# Reset batch-specific logging data
 		self.logger['batch_lens'] = []
 		self.logger['batch_rews'] = []

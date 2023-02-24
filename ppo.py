@@ -30,6 +30,7 @@ class PPO:
 			Returns:
 				None
 		"""
+
 		# Make sure the environment is compatible with our code
 		assert(type(env.observation_space) == gym.spaces.Box)
 		assert(type(env.action_space) == gym.spaces.Box)

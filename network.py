@@ -12,7 +12,7 @@ class FeedForwardNN(nn.Module):
 	"""
 		A standard in_dim-64-64-out_dim Feed Forward Neural Network.
 	"""
-	def __init__(self, in_dim, out_dim):
+	def __init__(self, in_dim, out_dim, weight_std):
 		"""
 			Initialize the network and set up the layers.
 
@@ -25,9 +25,16 @@ class FeedForwardNN(nn.Module):
 		"""
 		super(FeedForwardNN, self).__init__()
 
-		self.layer1 = nn.Linear(in_dim, 64)
-		self.layer2 = nn.Linear(64, 64)
-		self.layer3 = nn.Linear(64, out_dim)
+		self.layer1 = self.layer_init(nn.Linear(in_dim, 64))
+		self.layer2 = self.layer_init(nn.Linear(64, 64))
+		self.layer3 = self.layer_init(nn.Linear(64, out_dim), weight_std)
+
+
+	#IMPLEMENTATION DETAIL: Orthogonal Initialization of Weights and Constant Initialization of biases
+	def layer_init(self, layer, std=np.sqrt(2), bias_const = 0.0):
+		torch.nn.init.orthogonal_(layer.weight, std)
+		torch.nn.init.constant_(layer.bias, bias_const)
+		return layer
 
 	def forward(self, obs):
 		"""
