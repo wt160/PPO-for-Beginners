@@ -233,14 +233,15 @@ class PPO2:
 				# Calculate action and make a step in the env. 
 				# Note that rew is short for reward.
 				obs = torch.tensor(obs).to(self.device)
-				V = self.get_value(obs)
-				batch_V.append(V)
-				action, log_prob = self.get_action(obs)
-				obs, rew, done, _ = self.env.step(action)
+				with torch.no_grad():
+					V = self.get_value(obs)
+					batch_V.append(V)
+					action, log_prob = self.get_action(obs)
+					obs, rew, done, _ = self.env.step(action)
 				# Track recent reward, action, and action log probability
-				ep_rews.append(rew)
-				batch_acts.append(action)
-				batch_log_probs.append(log_prob)
+					ep_rews.append(rew)
+					batch_acts.append(action)
+					batch_log_probs.append(log_prob)
 
 				# If the environment tells us the episode is terminated, break
 				if done:
@@ -353,10 +354,8 @@ class PPO2:
 				log_prob - the log probability of the selected action in the distribution
 		"""
 		# Query the actor network for a mean action
-		actor_start =time.time()
 		mean = self.actor(obs)
-		actor_end = time.time()
-		print("actor time:{}".format(actor_end - actor_start))
+		# print("actor time:{}".format(actor_end - actor_start))
 		# Create a distribution with the mean action and std from the covariance matrix above.
 		# For more information on how this distribution works, check out Andrew Ng's lecture on it:
 		# https://www.youtube.com/watch?v=JjB58InuTqM
