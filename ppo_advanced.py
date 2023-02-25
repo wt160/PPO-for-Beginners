@@ -311,7 +311,7 @@ class PPO2:
 					nextvalue = batch_V[index+1]
 				delta = rew + self.gamma * nextvalue * nextnonterminal - batch_V[index]
 				advantage = lastgaelam = delta + self.gamma * self.gae_lambda * nextnonterminal * lastgaelam
-				batch_rtgs.insert(0, advantage)
+				batch_rtgs.insert(0, advantage + batch_V[index])
 				t += 1
 		batch_rtgs = torch.tensor(batch_rtgs, dtype=torch.float)
 
