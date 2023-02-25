@@ -74,6 +74,7 @@ class PPO2:
 			'clipfrac': [],
 		}
 
+		self.total_timesteps = 0
 		
 
 	def learn(self, total_timesteps):
@@ -86,6 +87,7 @@ class PPO2:
 			Return:
 				None
 		"""
+		self.total_timesteps = total_timesteps
 		print(f"Learning... Running {self.max_timesteps_per_episode} timesteps per episode, ", end='')
 		print(f"{self.timesteps_per_batch} timesteps per batch for a total of {total_timesteps} timesteps")
 		t_so_far = 0 # Timesteps simulated so far
@@ -189,13 +191,19 @@ class PPO2:
 				batch_lens - the lengths of each episode this batch. Shape: (number of episodes)
 		"""
 		# Batch data. For more details, check function header.
-		batch_obs = []
-		batch_acts = []
-		batch_log_probs = []
-		batch_rews = []
-		batch_rtgs = []
-		batch_lens = []
-		batch_V = []
+		# batch_obs = []
+		# batch_acts = []
+		# batch_log_probs = []
+		# batch_rews = []
+		# batch_rtgs = []
+		# batch_lens = []
+		# batch_V = []
+		batch_obs = torch.zeros((self.timesteps_per_batch, self.num_envs) + self.obs_dim).to(self.device)
+		batch_acts = torch.zeros((self.timesteps_per_batch, self.num_envs) + self.act_dim).to(self.device)
+		batch_log_probs = torch.zeros((self.timesteps_per_batch, self.num_envs)).to(self.device)
+		batch_rews = torch.zeros((self.timesteps_per_batch, self.num_envs)).to(self.device)
+		batch_dones = torch.zeros((self.timesteps_per_batch, self.num_envs)).to(self.device)
+		batch_V = torch.zeros((self.timesteps_per_batch, self.num_envs)).to(self.device)
 		# Episodic data. Keeps track of rewards per episode, will get cleared
 		# upon each new episode
 		ep_rews = []
@@ -205,6 +213,37 @@ class PPO2:
 		# Keep simulating until we've run more than or equal to specified timesteps per batch
 		done = False
 		obs = None
+
+		next_obs = envs.reset()
+		# print(next_obs)
+		# print(len(next_obs))
+		next_obs = torch.Tensor(next_obs).to(self.device)
+		next_done = torch.zeros(self.num_envs).to(self.device)
+		num_updates = self.total_timesteps // (self.num_envs * self.timesteps_per_batch)
+
+		for step in range(0, self.timesteps_per_batch):
+            global_step += 1 * self.num_envs
+            batch_obs[step] = next_obs
+            batch_dones[step] = next_done
+
+
+            # ALGO Logic: action logic
+            with torch.no_grad():
+                action, logprob, _, value = agent.get_action_and_value(next_obs)
+                values[step] = value.flatten()
+            actions[step] = action
+            logprobs[step] = logprob
+
+            # TRY NOT TO MODIFY: execute the game and log data.
+            next_obs, reward, done, info = envs.step(action.cpu().numpy()) 
+            
+            rewards[step] = torch.tensor(reward).to(device).view(-1)
+            next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(done).to(device)
+
+
+
+
+
 		while t < self.timesteps_per_batch:
 			ep_rews = [] # rewards collected per episode
 
