@@ -12,7 +12,6 @@ from ppo import PPO
 from ppo_advanced import PPO2
 from network import FeedForwardNN
 from eval_policy import eval_policy
-from torch.utils.tensorboard import SummaryWriter
 
 def train(env, hyperparameters, actor_model, critic_model):
 	"""

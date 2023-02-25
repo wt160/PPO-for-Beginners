@@ -44,8 +44,8 @@ class PPO:
 		self.act_dim = env.action_space.shape[0]
 
 		 # Initialize actor and critic networks
-		self.actor = policy_class(self.obs_dim, self.act_dim)                                                   # ALG STEP 1
-		self.critic = policy_class(self.obs_dim, 1)
+		self.actor = policy_class(self.obs_dim, self.act_dim, 0.01)                                                   # ALG STEP 1
+		self.critic = policy_class(self.obs_dim, 1, 1.0)
 
 		# Initialize optimizers for actor and critic
 		self.actor_optim = Adam(self.actor.parameters(), lr=self.lr)
@@ -270,7 +270,10 @@ class PPO:
 				log_prob - the log probability of the selected action in the distribution
 		"""
 		# Query the actor network for a mean action
+		actor_start =time.time()
 		mean = self.actor(obs)
+		actor_end = time.time()
+		print("actor time:{}".format(actor_end - actor_start))
 
 		# Create a distribution with the mean action and std from the covariance matrix above.
 		# For more information on how this distribution works, check out Andrew Ng's lecture on it:
