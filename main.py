@@ -12,9 +12,8 @@ from ppo import PPO
 from ppo_advanced import PPO2
 from network import FeedForwardNN
 from eval_policy import eval_policy
-from torch.utils.tensorboard import SummaryWriter
 
-def train(env, hyperparameters, actor_model, critic_model):
+def train(envs, hyperparameters, actor_model, critic_model):
 	"""
 		Trains the model.
 
@@ -30,7 +29,8 @@ def train(env, hyperparameters, actor_model, critic_model):
 	print(f"Training", flush=True)
 
 	# Create a model for PPO.
-	model = PPO2(policy_class=FeedForwardNN, env=env, **hyperparameters)
+	# model = PPO(policy_class=FeedForwardNN, env=envs, **hyperparameters)
+	model = PPO2(policy_class=FeedForwardNN, envs=envs, **hyperparameters)
 
 	# Tries to load in an existing actor/critic model to continue training on
 	if actor_model != '' and critic_model != '':
@@ -47,7 +47,7 @@ def train(env, hyperparameters, actor_model, critic_model):
 	# Train the PPO model with a specified total timesteps
 	# NOTE: You can change the total timesteps here, I put a big number just because
 	# you can kill the process whenever you feel like PPO is converging
-	model.learn(total_timesteps=200_000_000)
+	model.learn(total_timesteps=200_000_000_00)
 
 def test(env, actor_model):
 	"""
@@ -72,7 +72,7 @@ def test(env, actor_model):
 	act_dim = env.action_space.shape[0]
 
 	# Build our policy the same way we build our actor model in PPO
-	policy = FeedForwardNN(obs_dim, act_dim)
+	policy = FeedForwardNN(obs_dim, act_dim, 0.01)
 
 	# Load in the actor model saved by the PPO algorithm
 	policy.load_state_dict(torch.load(actor_model))
@@ -82,6 +82,18 @@ def test(env, actor_model):
 	# ppo.py since it only contains the training algorithm. The model/policy itself exists
 	# independently as a binary file that can be loaded in with torch.
 	eval_policy(policy=policy, env=env, render=True)
+
+def make_env(gym_id, mode):
+    def thunk():
+        env = gym.make(gym_id, hardcore = mode)
+        env = gym.wrappers.RecordEpisodeStatistics(env)
+        
+        # env.seed(seed)
+        # env.action_space.seed(seed)
+        # env.observation_space.seed(seed)
+        return env
+    return thunk
+
 
 def main(args):
 	"""
@@ -97,7 +109,7 @@ def main(args):
 	# ArgumentParser because it's too annoying to type them every time at command line. Instead, you can change them here.
 	# To see a list of hyperparameters, look in ppo.py at function _init_hyperparameters
 	hyperparameters = {
-				'timesteps_per_batch': 2048, 
+				'timesteps_per_batch': 200, 
 				'max_timesteps_per_episode': 200, 
 				'gamma': 0.99, 
 				'n_updates_per_iteration': 10,
@@ -105,6 +117,7 @@ def main(args):
 				'clip': 0.2,
 				'render': False,
 				'render_every_i': 40
+
 			  }
 
 	
@@ -112,11 +125,25 @@ def main(args):
 	# custom environment, note that it must inherit Gym and have both continuous
 	# observation and action spaces.
 	# env = gym.make('Pendulum-v0')
-	env = gym.make('BipedalWalker-v3', hardcore=False)
+	num_envs = 10
+	# env_list = []
+	# for i in range(num_envs):
+	# 	env = gym.make('BipedalWalker-v3', hardcore=False)
+	# 	# env = gym.make('CartPole-v0')
+	# 	env = gym.wrappers.RecordEpisodeStatistics(env)
+	# 	print(env)
+	# 	if not isinstance(env, gym.Env):
+	# 		raise ValueError(f"{env} is not a valid gym environment")
+	# 	env_list.append(env)
+	# print(env_list)
+	envs = gym.vector.SyncVectorEnv([make_env("BipedalWalker-v3", True) 
+        for i in range(num_envs)])
+	# envs = gym.vector.SyncVectorEnv(env_list)
 	# Train or test, depending on the mode specified
 	if args.mode == 'train':
-		train(env=env, hyperparameters=hyperparameters, actor_model=args.actor_model, critic_model=args.critic_model)
+		train(envs=envs, hyperparameters=hyperparameters, actor_model=args.actor_model, critic_model=args.critic_model)
 	else:
+		env = gym.make("BipedalWalker-v3", hardcore = True)
 		test(env=env, actor_model=args.actor_model)
 
 if __name__ == '__main__':
